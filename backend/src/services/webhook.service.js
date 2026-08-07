@@ -30,7 +30,13 @@ async function processGithubPush({
     payload,
 }) {
     try {
-        const project = await Project.findOne({ repoUrl, branch })
+        const cleanRepoUrl=repoUrl.replace(/\.git$/,'')
+        const project = await Project.findOne(
+            {
+                repoUrl:{$in:[cleanRepoUrl,`${cleanRepoUrl}`]},
+                branch
+            }
+        )
         if (!project)
             return {
                 success: false,

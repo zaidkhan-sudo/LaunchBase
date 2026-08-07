@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaunchBase Backend Architecture & Data Flow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --border-color: #30363d;
+            --text-color: #c9d1d9;
+            --heading-color: #58a6ff;
+            --accent-color: #238636;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 40px 20px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            color: var(--heading-color);
+            margin-top: 0;
+        }
+        h1 {
+            font-size: 2.2rem;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        h2 {
+            font-size: 1.5rem;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 40px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            overflow-x: auto;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        p, li {
+            font-size: 1.05rem;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        .badge {
+            background-color: #1f6feb;
+            color: #fff;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .step-list li {
+            margin-bottom: 12px;
+        }
+        code {
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2em 0.4em;
+            border-radius: 6px;
+            font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 LaunchBase Backend Architecture & Data Flow</h1>
+        <p>This interactive diagram page visualizes the data flow, background worker pipeline, and lifecycle of a project in your Vercel-clone backend (<code>backend/src</code>).</p>
+
+        <h2><span class="badge">1</span> High-Level System Architecture</h2>
+        <div class="card">
+            <p>The backend operates with two main processes: the <strong>Express API Server</strong> and the <strong>Background Build Worker</strong>, communicating asynchronously via <strong>Redis</strong> and <strong>MongoDB</strong>.</p>
+            <div class="mermaid">
+graph TB
+    subgraph Client ["Client / External Systems"]
+        User["User Frontend Application"]
+        GitHub["GitHub Webhook Service"]
+    end
+
+    subgraph APIServer ["Express API Server"]
+        AuthMid["Auth Middleware (JWT Verification)"]
+        ProjectCtrl["Project Controller"]
+        WebhookCtrl["Webhook Controller"]
+    end
+
+    subgraph DataStore ["Data Stores and Queues"]
+        MongoDB[("MongoDB Database (Models)")]
+        RedisQueue[["Redis build-queue (LPUSH / BRPOP)"]]
+    end
+
+    subgraph WorkerProcess ["Background Build Worker"]
+        QueuePop["Queue Consumer (popFromBuildQueue)"]
+        GitClone["Simple-Git Client (Shallow Clone)"]
+        DockerSvc["Docker Service (Dockerfile Generator)"]
+        Watchdog["Watchdog Timer (15m Timeout)"]
+    end
+
+    subgraph DockerHost ["Docker Engine"]
+        DockerDaemon["Local Docker Daemon"]
+        ImageTag["Docker Image (launchbase-id:latest)"]
+    end
+
+    User -->|1. POST /api/project| AuthMid
+    AuthMid -->|2. Authenticate| ProjectCtrl
+    ProjectCtrl -->|3. Create Project Document| MongoDB
+    ProjectCtrl -->|4. LPUSH Job JSON| RedisQueue
+
+    GitHub -->|POST /api/webhook/github| WebhookCtrl
+    WebhookCtrl -->|Verify HMAC Signature| MongoDB
+    WebhookCtrl -->|LPUSH Build Job| RedisQueue
+
+    RedisQueue -->|5. BRPOP Job| QueuePop
+    QueuePop -->|6. Status: BUILDING| MongoDB
+    QueuePop -->|7. Clone Repo| GitClone
+    GitClone -->|8. Generate Dockerfile| DockerSvc
+    DockerSvc -->|9. docker build| DockerDaemon
+    DockerDaemon -->|10. Tagged Image| ImageTag
+    DockerSvc -->|11. Status: READY or FAILED| MongoDB
+            </div>
+        </div>
+
+        <h2><span class="badge">2</span> Step-by-Step Sequence: What Happens After Project Creation?</h2>
+        <div class="card">
+            <p>Here is the exact timeline of events when a user submits a new project:</p>
+            <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as Frontend User
+    participant API as Express API
+    participant Auth as Auth Middleware
+    participant Mongo as MongoDB
+    participant Redis as Redis Queue
+    participant Worker as Build Worker
+    participant Git as GitHub Repo
+    participant Docker as Docker Service
+
+    User->>API: POST /api/project (name, repoUrl, branch) + Token
+    API->>Auth: Verify JWT and retrieve User
+    Auth-->>API: Authorized user attached
+    API->>Mongo: Check duplicate project name
+    API->>Mongo: Create Project document with QUEUED status
+    Mongo-->>API: Return Project Document ID
+    API->>Redis: LPUSH build-queue with project job JSON
+    API-->>User: 201 Created - Project queued for build
+
+    Note over Worker,Redis: Asynchronous Background Execution
+    Worker->>Redis: BRPOP build-queue (blocking pop)
+    Redis-->>Worker: Dequeue job payload
+    Worker->>Mongo: Update status to BUILDING
+    Worker->>Git: Clone repository shallowly (--depth 1)
+    Git-->>Worker: Repository cloned locally
+    
+    Note over Worker,Docker: Dockerfile Generation and Image Build
+    Worker->>Docker: autoGenerateDockerfile (detect Node, Python, Go)
+    Worker->>Docker: buildDockerImage (docker build)
+    Docker->>Docker: Spawn local docker build process
+    Docker-->>Worker: Build completes successfully
+    
+    Note over Worker,Mongo: Completion and Status Reporting
+    Worker->>Mongo: Update status to READY or FAILED
+            </div>
+        </div>
+
+        <h2><span class="badge">3</span> Project Lifecycle State Transitions</h2>
+        <div class="card">
+            <p>Every project in MongoDB moves through these states during its build and deployment cycle:</p>
+            <div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE: Default Schema State
+    IDLE --> QUEUED: POST /api/project or Git Webhook Push
+    QUEUED --> BUILDING: Build Worker dequeues job from Redis
+    BUILDING --> READY: Docker Image built and tagged successfully
+    BUILDING --> FAILED: Git clone error / Docker build error / 15m Timeout
+    FAILED --> QUEUED: Next Git Push / Manual Re-queue
+    READY --> QUEUED: Next Git Push (Webhook CI/CD Trigger)
+            </div>
+        </div>
+
+        <h2><span class="badge">4</span> Key Files in Your Backend</h2>
+        <div class="card">
+            <ul class="step-list">
+                <li><code>server.js</code> & <code>src/app.js</code>: Express API server entry point and CORS/logging middleware configuration.</li>
+                <li><code>src/controllers/project.controller.js</code>: Handles <code>handleCreateProject</code>, creates MongoDB record, and pushes job to Redis.</li>
+                <li><code>src/services/queue.service.js</code>: Wraps <code>ioredis</code> with <code>pushToBuildQueue</code> (LPUSH) and <code>popFromBuildQueue</code> (BRPOP).</li>
+                <li><code>src/workers/buildWorker.js</code>: Standalone background worker process that pulls jobs from Redis, clones git repos, and builds Docker images.</li>
+                <li><code>src/services/docker.service.js</code>: Automatically generates Dockerfiles for Node.js, Python, and Go projects, and executes <code>docker build</code>.</li>
+                <li><code>src/services/webhook.service.js</code>: Verifies GitHub HMAC SHA-256 webhook signatures and re-queues builds on push events.</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            securityLevel: 'loose',
+            flowchart: { useMaxWidth: true, htmlLabels: true },
+            sequence: { useMaxWidth: true }
+        });
+    </script>
+</body>
+</html>

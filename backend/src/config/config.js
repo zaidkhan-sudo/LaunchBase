@@ -23,9 +23,15 @@ const config={
     GOOGLE_CLIENT_SECRET:process.env.GOOGLE_CLIENT_SECRET,
     GOOGLE_REFRESH_TOKEN:process.env.GOOGLE_REFRESH_TOKEN,
     GOOGLE_USER:process.env.GOOGLE_USER,
+    
     AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
     AWS_REGION: process.env.AWS_REGION || "ap-south-1",
     AWS_ACCOUNT_ID: process.env.AWS_ACCOUNT_ID,
+    AWS_ECS_EXECUTION_ROLE_ARN: process.env.AWS_ECS_EXECUTION_ROLE_ARN,
+    AWS_ECS_CLUSTER_NAME: process.env.AWS_ECS_CLUSTER_NAME || "vercel-clone-cluster",
+    AWS_VPC_SUBNET_ID_1: process.env.AWS_VPC_SUBNET_ID_1,
+    AWS_VPC_SUBNET_ID_2: process.env.AWS_VPC_SUBNET_ID_2,
+    AWS_VPC_SECURITY_GROUP_ID: process.env.AWS_VPC_SECURITY_GROUP_ID
 }
 export default config

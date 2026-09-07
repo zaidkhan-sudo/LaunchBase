@@ -4,6 +4,26 @@ export function generateOtp() {
   return crypto.randomInt(100000, 999999).toString();
 }
 
+/**
+ * Options for the refresh-token cookie.
+ *
+ * `secure` is disabled outside production because Safari refuses Secure cookies
+ * over plain http://localhost, which silently breaks token refresh in local dev.
+ *
+ * `sameSite: 'strict'` is fine while the frontend and API share a hostname —
+ * SameSite ignores the port, so localhost:5173 -> localhost:8000 counts as
+ * same-site. If they are ever deployed to different domains this must become
+ * 'none' (which also requires secure: true), or the cookie will not be sent.
+ */
+export function refreshCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+}
+
 export function getOtpHtml(otp) {
   return `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">

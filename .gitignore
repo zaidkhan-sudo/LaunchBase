@@ -2,4 +2,8 @@ node_modules
 .env
 .DS_Store
 workspace/
-frontend/ 
+dist/
+scratch-*.mjs
+
+ALB-SETUP.md
+DAY13.md

@@ -43,6 +43,21 @@ const projectSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    /*
+      ALB routing resources, recorded so deleting a project can tear them down.
+      Target groups and listener rules cost nothing, but a listener is capped at
+      100 rules — leaked rules from deleted projects would eventually make every
+      new deploy fail. Null on projects deployed before ALB routing existed, and
+      whenever ALB routing is not configured.
+    */
+    albTargetGroupArn: {
+      type: String,
+      default: null,
+    },
+    albListenerRuleArn: {
+      type: String,
+      default: null,
+    },
     liveUrl: {
       type: String,
       default: null,

@@ -33,13 +33,17 @@ async function handleGitHubWebhook(req, res) {
             commitMessage,
             author,
             signatureHeader,
+            // Captured by the express.json verify hook in app.js — GitHub signs
+            // the raw bytes, not the re-serialized object.
+            rawBody: req.rawBody,
             payload
         })
         if (!result.success) return res.status(result.status).json({ msg: result.message })
         return res.status(200).json(
             {
                 msg:result.message,
-                project_id:result.project_id
+                project_id:result.project_id,
+                deploymentId:result.deploymentId
             }
         )
     } catch (error) {

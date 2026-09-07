@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken'
 import config from "../config/config.js"
 import sessionModel from "../models/session.model.js"
 import sendEmail from '../services/email.service.js' 
-import { generateOtp,getOtpHtml } from "../utils/util.js"
+import { generateOtp,getOtpHtml,refreshCookieOptions } from "../utils/util.js"
 import otpModel from "../models/otp.model.js"
 
 async function  handleRegister(req,res){
@@ -103,12 +103,7 @@ async function handleLogin(req,res){
         )
 
 
-        res.cookie("refreshToken",refreshToken,{
-            httpOnly:true,
-            secure:true,
-            sameSite:"strict",
-            maxAge:7*24*60*60*1000
-        })
+        res.cookie("refreshToken",refreshToken,refreshCookieOptions())
 
 
         res.status(200).json(
@@ -134,8 +129,12 @@ async function handleGetMe(req,res){
         return res.status(200).json(
             {
                 msg:"User fetched successfully",
-                user:req.user.username,
-                email:req.user.email
+                user:{
+                    username:req.user.username,
+                    email:req.user.email,
+                    verified:req.user.verified,
+                    githubUsername:req.user.githubUsername
+                }
             }
         )
     } catch (error) {
@@ -150,7 +149,6 @@ async function handleRefreshToken(req,res){
     try {
         const refreshToken=req.cookies.refreshToken
         if(!refreshToken) return res.status(401).json({msg:"Refresh token not found"})
-        
         const decoded=jwt.verify(refreshToken,config.JWT_SECRET)
 
         const refreshTokenHash=crypto.createHash("sha256").update(refreshToken).digest("hex")
@@ -158,7 +156,9 @@ async function handleRefreshToken(req,res){
             refreshTokenHash,
             revoked:false
         })
-        if(!session) return res.status(400).json({msg:"Invalid refresh token"})
+        // Revoked or unknown session means "not logged in" -> 401, so the client
+        // can react the same way it does to an expired token.
+        if(!session) return res.status(401).json({msg:"Invalid refresh token"})
         
         const accessToken=jwt.sign(
             {
@@ -185,12 +185,7 @@ async function handleRefreshToken(req,res){
         session.refreshTokenHash=newRefreshTokenHash
         await session.save()
 
-        res.cookie("refreshToken",newRefreshToken,{
-            httpOnly:true,
-            secure:true,
-            sameSite:"strict",
-            maxAge:7*24*60*60*1000
-        })
+        res.cookie("refreshToken",newRefreshToken,refreshCookieOptions())
 
         res.status(200).json({
             msg:"Access token refreshed successfully",
@@ -198,6 +193,10 @@ async function handleRefreshToken(req,res){
         })
     } catch (error) {
         console.error("[Auth Error] handleRefreshToken failed:", error);
+        // An expired/tampered refresh token is a 401 (log the user out), not a 500.
+        if(error.name==="JsonWebTokenError" || error.name==="TokenExpiredError"){
+            return res.status(401).json({msg:"Invalid or expired refresh token"})
+        }
         return res.status(500).json({ msg: error.message || "Internal server error" });
     }
 }
@@ -318,12 +317,7 @@ async function handleVerifyEmail(req,res){
         )
 
 
-        res.cookie("refreshToken",refreshToken,{
-            httpOnly:true,
-            secure:true,
-            sameSite:"strict",
-            maxAge:7*24*60*60*1000
-        })
+        res.cookie("refreshToken",refreshToken,refreshCookieOptions())
 
         return res.status(200).json(
             {
@@ -332,7 +326,10 @@ async function handleVerifyEmail(req,res){
                     username:user.username,
                     email:user.email,
                     verified:user.verified
-                }
+                },
+                // Returned so the client lands authenticated straight after
+                // verifying, instead of being bounced to the login screen.
+                accessToken
             }
         )
     } catch (error) {

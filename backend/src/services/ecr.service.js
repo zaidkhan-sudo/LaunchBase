@@ -57,8 +57,11 @@ async function ensureEcrRepository(repoName) {
 
 /**
  * Helper to run Docker CLI commands as a Promise
+ * @param {string[]} args
+ * @param {string|null} stdinInput
+ * @param {((chunk: Buffer|string, stream: string) => void)|null} onLog stream sink
  */
-function runDockerCommand(args, stdinInput = null) {
+function runDockerCommand(args, stdinInput = null, onLog = null) {
     return new Promise((resolve, reject) => {
         const child = spawn("docker", args)
 
@@ -68,11 +71,13 @@ function runDockerCommand(args, stdinInput = null) {
         }
 
         child.stdout.on("data", (data) => {
-            console.log(`[Docker ECR] ${data.toString().trim()}`)
+            if (onLog) onLog(data, "stdout")
+            else console.log(`[Docker ECR] ${data.toString().trim()}`)
         })
 
         child.stderr.on("data", (data) => {
-            console.warn(`[Docker ECR] ${data.toString().trim()}`)
+            if (onLog) onLog(data, "stdout")
+            else console.warn(`[Docker ECR] ${data.toString().trim()}`)
         })
 
         child.on("close", (code) => {
@@ -94,6 +99,8 @@ function runDockerCommand(args, stdinInput = null) {
  */
 async function loginDockerToEcr(username, password, registryUrl) {
     console.log(`[ECR Service] Logging in Docker to ECR: ${registryUrl}...`)
+    // Deliberately no onLog: this command echoes a credential-storage warning,
+    // and its output should not reach the user-visible build log.
     await runDockerCommand(
         ["login", "--username", username, "--password-stdin", registryUrl],
         password
@@ -103,30 +110,40 @@ async function loginDockerToEcr(username, password, registryUrl) {
 
 /**
  * 4. Main orchestration function: Authenticate, Ensure Repo, Tag, and Push
+ * @param {string} localImageTag
+ * @param {string} ecrRepoName
+ * @param {string} tag
+ * @param {((chunk: Buffer|string, stream: string) => void)|null} onLog stream sink
  */
-async function pushImageToEcr(localImageTag, ecrRepoName, tag = "latest") {
+async function pushImageToEcr(localImageTag, ecrRepoName, tag = "latest", onLog = null) {
+    const say = (msg) => {
+        if (onLog) onLog(msg, "system")
+        else console.log(msg)
+    }
+
     try {
-        console.log(`[ECR Service] Starting push process for '${localImageTag}' -> ECR Repo '${ecrRepoName}'...`)
+        say(`[ECR Service] Starting push process for '${localImageTag}' -> ECR Repo '${ecrRepoName}'...`)
 
         // 1. Get AWS auth token
         const { username, password, registryUrl } = await getEcrLoginToken()
 
         // 2. Authenticate Docker with ECR
         await loginDockerToEcr(username, password, registryUrl)
+        say("[ECR Service] Docker authenticated with ECR.")
 
         // 3. Ensure repository exists and get its URI
         const repositoryUri = await ensureEcrRepository(ecrRepoName)
         const ecrImageUri = `${repositoryUri}:${tag}`
 
         // 4. Tag the local image for ECR
-        console.log(`[ECR Service] Tagging image '${localImageTag}' as '${ecrImageUri}'...`)
-        await runDockerCommand(["tag", localImageTag, ecrImageUri])
+        say(`[ECR Service] Tagging image '${localImageTag}' as '${ecrImageUri}'...`)
+        await runDockerCommand(["tag", localImageTag, ecrImageUri], null, onLog)
 
         // 5. Push the image to ECR
-        console.log(`[ECR Service] Pushing image '${ecrImageUri}' to AWS ECR... (This may take a minute)`)
-        await runDockerCommand(["push", ecrImageUri])
+        say(`[ECR Service] Pushing image '${ecrImageUri}' to AWS ECR... (This may take a minute)`)
+        await runDockerCommand(["push", ecrImageUri], null, onLog)
 
-        console.log(`[ECR Service] Successfully pushed Docker image to ECR: ${ecrImageUri}`)
+        say(`[ECR Service] Successfully pushed Docker image to ECR: ${ecrImageUri}`)
         return ecrImageUri
     } catch (error) {
         console.error("[ECR Service] Error pushing image to ECR:", error.message)

@@ -1,284 +1,1121 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LaunchBase Backend Architecture & Data Flow</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        background: '#050505',
-                        surface: '#0a0a0a',
-                        surfaceBorder: '#1a1a1a',
-                        primary: '#00e599',
-                        foreground: '#ededed',
-                        muted: '#a1a1a1'
-                    }
-                }
-            }
-        }
-    </script>
-    <script>
-        mermaid.initialize({
-            startOnLoad: true,
-            theme: 'dark',
-            securityLevel: 'loose',
-            themeVariables: {
-                background: '#050505',
-                primaryColor: '#050505',
-                primaryTextColor: '#fff',
-                primaryBorderColor: '#00e599',
-                lineColor: '#ffffff',
-                secondaryColor: '#1a1a1a',
-                tertiaryColor: '#222222'
-            },
-            fontFamily: 'Inter, sans-serif'
-        });
-    </script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #050505;
-            color: #ededed;
-            margin: 0;
-            padding: 40px 20px;
-            line-height: 1.6;
-        }
-        .container {
-            max-width: 1100px;
-            margin: 0 auto;
-        }
-        h1 {
-            font-size: 2.2rem;
-            border-bottom: 1px solid #1a1a1a;
-            padding-bottom: 15px;
-            margin-bottom: 30px;
-            color: #fff;
-        }
-        h2 {
-            font-size: 1.5rem;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #00e599;
-        }
-        .card {
-            background-color: #0a0a0a;
-            border: 1px solid #1a1a1a;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 40px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-            overflow-x: auto;
-        }
-        .mermaid {
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            margin: 20px 0;
-            overflow-x: auto;
-        }
-        .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-        p, li {
-            font-size: 1.05rem;
-            color: #a1a1a1;
-        }
-        ul {
-            padding-left: 20px;
-        }
-        .badge {
-            background-color: #00e599;
-            color: #050505;
-            padding: 3px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: bold;
-        }
-        .step-list li {
-            margin-bottom: 12px;
-        }
-        code {
-            background-color: #1a1a1a;
-            padding: 0.2em 0.4em;
-            border-radius: 6px;
-            font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
-            font-size: 0.9em;
-            color: #fff;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LaunchBase Backend Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --bg:#050505;
+    --panel:#0b0b0c;
+    --panel-2:#101012;
+    --line:#1c1c20;
+    --line-soft:#151517;
+    --fg:#ededed;
+    --muted:#8b8b92;
+    --dim:#5f5f68;
+    --accent:#00e599;
+    --accent-dim:#00e59922;
+    --warn:#ffb224;
+    --danger:#ff5c5c;
+    --blue:#4d9fff;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Inter',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:15px;line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{font-family:var(--mono);font-size:.86em;background:var(--panel-2);
+    border:1px solid var(--line-soft);border-radius:4px;padding:.1em .38em;color:#d7d7dd}
+  pre{
+    font-family:var(--mono);font-size:12.5px;line-height:1.65;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;overflow-x:auto;margin:22px 0;color:#c9c9d1;
+  }
+  pre code{background:none;border:none;padding:0;font-size:inherit;color:inherit}
+
+  /* ---------- layout ---------- */
+  .shell{display:flex;min-height:100vh}
+  nav.side{
+    position:sticky;top:0;height:100vh;flex:0 0 254px;
+    border-right:1px solid var(--line);background:#070708;
+    padding:26px 0 40px;overflow-y:auto;
+  }
+  .brand{padding:0 22px 20px;border-bottom:1px solid var(--line);margin-bottom:16px}
+  .brand .logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:15px;letter-spacing:-.2px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);
+    box-shadow:0 0 12px var(--accent);flex:none}
+  .brand .sub{font-size:11px;color:var(--dim);margin-top:5px;font-family:var(--mono)}
+  nav.side ol{list-style:none;margin:0;padding:0 12px}
+  nav.side a{
+    display:flex;gap:10px;padding:6px 10px;border-radius:6px;
+    color:var(--muted);font-size:13px;line-height:1.45;border-left:2px solid transparent;
+  }
+  nav.side a:hover{color:var(--fg);background:var(--panel-2);text-decoration:none}
+  nav.side a.active{color:var(--accent);background:var(--accent-dim);border-left-color:var(--accent)}
+  nav.side a .n{font-family:var(--mono);font-size:11px;color:var(--dim);flex:none;width:16px}
+  nav.side a.active .n{color:var(--accent)}
+
+  main{flex:1;min-width:0;padding:0 0 120px}
+  .wrap{max-width:920px;margin:0 auto;padding:0 40px}
+
+  /* ---------- hero ---------- */
+  header.hero{
+    border-bottom:1px solid var(--line);padding:74px 0 60px;margin-bottom:56px;
+    background:radial-gradient(900px 340px at 22% -10%,rgba(0,229,153,.09),transparent 70%);
+  }
+  .tagline{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+  h1{font-size:44px;line-height:1.1;letter-spacing:-1.4px;margin:0 0 18px;font-weight:700}
+  .lede{font-size:17px;color:var(--muted);max-width:660px;margin:0}
+  .stats{display:flex;flex-wrap:wrap;gap:34px;margin-top:38px}
+  .stat .v{font-family:var(--mono);font-size:22px;color:var(--fg);font-weight:500}
+  .stat .k{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+
+  /* ---------- sections ---------- */
+  section{margin-bottom:74px;scroll-margin-top:24px}
+  h2{
+    font-size:13px;font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 8px;font-weight:500;
+  }
+  h2 + .h{font-size:29px;letter-spacing:-.7px;margin:0 0 22px;font-weight:600;line-height:1.25}
+  h3{font-size:17px;margin:38px 0 12px;font-weight:600;letter-spacing:-.2px}
+  h4{font-size:14px;margin:26px 0 8px;font-weight:600;color:#d5d5db}
+  p{margin:0 0 16px;color:#c2c2c9}
+  ul,ol{margin:0 0 18px;padding-left:20px;color:#c2c2c9}
+  li{margin-bottom:8px}
+  strong{color:var(--fg);font-weight:600}
+
+  /* ---------- tables ---------- */
+  .tw{overflow-x:auto;margin:22px 0;border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+  th{
+    text-align:left;padding:11px 16px;background:var(--panel-2);color:var(--muted);
+    font-weight:500;font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+    border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  td{padding:11px 16px;border-bottom:1px solid var(--line-soft);color:#c2c2c9;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:#0d0d0f}
+  td code{font-size:12px}
+
+  /* ---------- callouts ---------- */
+  .note{
+    border:1px solid var(--line);border-left:2px solid var(--accent);
+    background:var(--panel);border-radius:0 10px 10px 0;padding:16px 20px;margin:22px 0;
+  }
+  .note.warn{border-left-color:var(--warn)}
+  .note.danger{border-left-color:var(--danger)}
+  .note .t{font-size:11px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);margin-bottom:6px}
+  .note.warn .t{color:var(--warn)}
+  .note.danger .t{color:var(--danger)}
+  .note p:last-child{margin-bottom:0}
+
+  /* ---------- cards ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:14px;margin:22px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:17px 19px}
+  .card h5{margin:0 0 7px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .card p{margin:0;font-size:13px;color:var(--muted);line-height:1.6}
+  .card .num{font-family:var(--mono);font-size:11px;color:var(--bg);background:var(--accent);
+    border-radius:4px;padding:1px 6px;font-weight:600;flex:none}
+
+  /* ---------- mermaid ---------- */
+  .dia{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:26px 20px;margin:24px 0;overflow-x:auto;text-align:center}
+  .dia .cap{font-size:12px;color:var(--dim);margin-top:14px;font-family:var(--mono)}
+  .mermaid{display:flex;justify-content:center;min-width:min-content}
+
+  /* ---------- pills ---------- */
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;
+    border-radius:20px;border:1px solid var(--line);color:var(--muted);margin-right:6px}
+  .pill.on{border-color:var(--accent);color:var(--accent)}
+  .pill.off{border-color:var(--dim);color:var(--dim)}
+  .pill.bad{border-color:var(--danger);color:var(--danger)}
+
+  footer{border-top:1px solid var(--line);padding-top:26px;color:var(--dim);font-size:13px}
+
+  @media (max-width:900px){
+    nav.side{display:none}
+    .wrap{padding:0 20px}
+    h1{font-size:32px;letter-spacing:-.8px}
+    header.hero{padding:44px 0 38px;margin-bottom:40px}
+    .stats{gap:22px}
+  }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>🚀 LaunchBase Backend Architecture & Data Flow</h1>
-        <p>This interactive diagram page visualizes the end-to-end architecture, background worker pipeline, realtime logging bridge, and AWS infrastructure lifecycle in your Vercel-clone backend (<code>backend/src</code>).</p>
+<div class="shell">
 
-        <h2><span class="badge">1</span> High-Level System Architecture</h2>
-        <div class="card">
-            <p>The backend operates as two isolated processes: the <strong>API Server</strong> and the <strong>Build Worker</strong>. They communicate asynchronously via <strong>Redis</strong> (Pub/Sub for logs, Queue for jobs) and <strong>MongoDB</strong> (persistent state).</p>
-            <div class="mermaid">
-                graph LR
-                    subgraph Clients ["Clients and Triggers"]
-                        User["User Browser"]
-                        GitHub["GitHub Webhooks"]
-                    end
+<nav class="side">
+  <div class="brand">
+    <div class="logo"><span class="dot"></span> LaunchBase</div>
+    <div class="sub">backend architecture</div>
+  </div>
+  <ol id="toc">
+    <li><a href="#topology"><span class="n">01</span> Topology</a></li>
+    <li><a href="#api"><span class="n">02</span> API server</a></li>
+    <li><a href="#models"><span class="n">03</span> Data model</a></li>
+    <li><a href="#auth"><span class="n">04</span> Signup flow</a></li>
+    <li><a href="#create"><span class="n">05</span> Create project</a></li>
+    <li><a href="#pipeline"><span class="n">06</span> Build pipeline</a></li>
+    <li><a href="#deploy"><span class="n">07</span> Two deploy paths</a></li>
+    <li><a href="#stream"><span class="n">08</span> Log streaming</a></li>
+    <li><a href="#webhook"><span class="n">09</span> GitHub webhook</a></li>
+    <li><a href="#teardown"><span class="n">10</span> Delete + teardown</a></li>
+    <li><a href="#state"><span class="n">11</span> State &amp; timing</a></li>
+    <li><a href="#config"><span class="n">12</span> Config gate</a></li>
+    <li><a href="#edges"><span class="n">13</span> Sharp edges</a></li>
+    <li><a href="#files"><span class="n">14</span> File map</a></li>
+  </ol>
+</nav>
 
-                    subgraph API ["API Server"]
-                        Auth["REST API and Auth"]
-                        SocketIO["SocketIO Server"]
-                        RedisSub["Redis Subscriber"]
-                    end
+<main>
 
-                    subgraph Data ["State and Message Brokers"]
-                        Mongo[("MongoDB State")]
-                        Redis[("Redis PubSub and Job Queue")]
-                    end
-
-                    subgraph Worker ["Build Worker Process"]
-                        JobQueue["Queue Consumer"]
-                        DockerCLI["Docker Build Engine"]
-                        Logger["Log Publisher"]
-                    end
-
-                    subgraph AWS ["AWS Infrastructure"]
-                        ECR["Amazon ECR"]
-                        ALB["Application Load Balancer"]
-                        ECS["ECS Fargate Services"]
-                    end
-
-                    User -->|1a. POST /project| Auth
-                    User -->|1b. Connect| SocketIO
-                    GitHub -->|1c. Webhook Push| Auth
-                    
-                    Auth -->|2. Save to DB| Mongo
-                    Auth -->|3. LPUSH Job| Redis
-                    
-                    Redis -->|4. BRPOP Job| JobQueue
-                    JobQueue -->|5. Clone and Build| DockerCLI
-                    DockerCLI -->|6. Push Image| ECR
-                    JobQueue -->|7. Provision| ALB
-                    JobQueue -->|8. Deploy| ECS
-                    
-                    ALB -->|9. Route Traffic| ECS
-                    User -->|10. Visit Live App| ALB
-                    
-                    Logger -->|11. Publish Logs| Redis
-                    Redis -->|12. Relay Logs| RedisSub
-                    RedisSub -->|13. Emit to Client| SocketIO
-                    SocketIO -->|14. Push to UI| User
-            </div>
-        </div>
-
-        <h2><span class="badge">2</span> Step-by-Step Sequence: Build & Deployment</h2>
-        <div class="card">
-            <p>The exact sequence of events when a user submits a project or pushes to GitHub. Notice how the Build Worker orchestrates the entire AWS deployment flow before marking the project as READY.</p>
-            <div class="mermaid">
-                sequenceDiagram
-                    autonumber
-                    actor User
-                    participant API as API Server
-                    participant Redis as Redis Queue
-                    participant Worker as Build Worker
-                    participant AWS as AWS (ECR / ALB / ECS)
-                    
-                    User->>API: POST /api/project (repo, branch)
-                    API->>Redis: LPUSH (project_id, repo, commit hash)
-                    API-->>User: 201 Created (QUEUED)
-                    
-                    Note over Worker,Redis: Asynchronous Background Execution
-                    Worker->>Redis: BRPOP (wait for job)
-                    Redis-->>Worker: Dequeue Job Payload
-                    
-                    Worker->>Worker: 1. CLONE Phase (shallow clone repo)
-                    Worker->>Worker: 2. DOCKERFILE Phase (auto-generate if missing)
-                    Worker->>Worker: 3. BUILD Phase (docker build)
-                    
-                    Worker->>AWS: 4. PUSH Phase (tag & push to ECR)
-                    AWS-->>Worker: Image URI
-                    
-                    Note over Worker,AWS: 5. DEPLOY Phase (Provisioning AWS)
-                    Worker->>AWS: Register ECS Task Definition
-                    Worker->>AWS: Ensure Target Group (IP-type, health checks)
-                    Worker->>AWS: Ensure Listener Rule (project.domain.com)
-                    Worker->>AWS: Ensure ECS Service (zero-downtime rolling deploy)
-                    
-                    loop Health Check Polling (max 3 minutes)
-                        Worker->>AWS: getTargetHealth()
-                        AWS-->>Worker: Target States (initial / unhealthy / healthy)
-                    end
-                    
-                    Worker->>Redis: PUBLISH Status: READY + liveUrl
-            </div>
-        </div>
-
-        <h2><span class="badge">3</span> Real-Time Log Streaming Pipeline</h2>
-        <div class="card">
-            <p>The Build Worker and API Server are separate OS processes. Socket.IO connections live on the API server, but logs are generated by the Worker. Redis Pub/Sub bridges this gap while MongoDB provides durability.</p>
-            <div class="mermaid">
-                graph LR
-                    Worker["Build Worker"] -->|1. stdout/stderr chunks| LogService["Log Service (Worker-side)"]
-                    LogService -->|2. Buffer 50 lines per sec| MongoBatch[("MongoDB Batch Write")]
-                    LogService -->|3. Immediate PUBLISH| Redis[("Redis (deployment:events)")]
-                    Redis -->|4. Subscribe| API["API Server (Redis Subscriber)"]
-                    API -->|5. Match Room ID| SocketIO["Socket.IO Server"]
-                    SocketIO -->|6. Emit to project room| Browser["Browser (Terminal UI)"]
-            </div>
-        </div>
-
-        <h2><span class="badge">4</span> Project Lifecycle State Machine</h2>
-        <div class="card">
-            <p>Projects and their Deployments transition through these distinct states. Stuck builds are automatically killed by a 15-minute Watchdog cron job.</p>
-            <div class="mermaid">
-                stateDiagram-v2
-                    [*] --> IDLE: Default Schema State
-                    IDLE --> QUEUED: POST /api/project or Git Push
-                    QUEUED --> BUILDING: Worker picks up job (Cloning/Building)
-                    BUILDING --> DEPLOYING: Image Pushed, provisioning AWS
-                    DEPLOYING --> READY: ALB Health Checks Passed
-                    
-                    BUILDING --> FAILED: Build Error / 15m Watchdog Timeout
-                    DEPLOYING --> FAILED: Container Crash / Health Check Timeout
-                    
-                    FAILED --> QUEUED: Manual Redeploy / Git Push
-                    READY --> QUEUED: New GitHub Webhook Push
-            </div>
-        </div>
-
-        <h2><span class="badge">5</span> Infrastructure Teardown Flow</h2>
-        <div class="card">
-            <p>AWS requires strict reverse-order deletion. You cannot delete a Target Group if an ECS Service or ALB Listener Rule still references it. The API Server coordinates this dance synchronously.</p>
-            <div class="mermaid">
-                graph LR
-                    Start["DELETE /api/project/:id"] --> ECSSvc["1. deleteECSService"]
-                    ECSSvc --> Drain["2. Wait 8s Drain"]
-                    Drain --> Rule["3. deleteListenerRule"]
-                    Rule --> Target["4. deleteTargetGroup"]
-                    Target --> Mongo["5. Delete from DB"]
-                    Mongo --> End["Project completely erased"]
-            </div>
-        </div>
-
-        <h2><span class="badge">6</span> Key Files in Your Backend</h2>
-        <div class="card">
-            <ul class="step-list">
-                <li><code>src/app.js</code>: Express setup, routes, CORS, and raw webhook parsing via <code>express.json</code> hooks.</li>
-                <li><code>src/workers/buildWorker.js</code>: The entire asynchronous CI/CD orchestrator. Clones, builds, pushes to ECR, provisions ALB rules, and spins up ECS services.</li>
-                <li><code>src/services/log.service.js</code>: Strips ANSI escape codes, immediately publishes logs to Redis, and batches database writes.</li>
-                <li><code>src/services/alb.service.js</code>: Handles AWS Target Groups and Listener Rules with robust naming and free-priority-slot detection.</li>
-                <li><code>src/services/ecs.service.js</code>: Handles Fargate tasks, zero-downtime <code>CreateService</code> deployments, and AWS rollout circuit-breakers.</li>
-                <li><code>src/services/webhook.service.js</code>: Verifies cryptographic HMAC signatures of incoming GitHub push events.</li>
-                <li><code>src/sockets/index.js</code>: Subscribes to Redis, authenticates WebSocket connections, and funnels events into user-specific project rooms.</li>
-            </ul>
-        </div>
+<header class="hero">
+  <div class="wrap">
+    <div class="tagline">Verified against backend/src</div>
+    <h1>From a repo URL to a running container.</h1>
+    <p class="lede">
+      LaunchBase clones a GitHub repository, containerizes it, ships the image to AWS,
+      and streams every line of the build to the browser as it happens. This document
+      traces that path end to end, through both processes that make it work.
+    </p>
+    <div class="stats">
+      <div class="stat"><div class="v">2</div><div class="k">OS processes</div></div>
+      <div class="stat"><div class="v">5</div><div class="k">build steps</div></div>
+      <div class="stat"><div class="v">5</div><div class="k">collections</div></div>
+      <div class="stat"><div class="v">15</div><div class="k">REST endpoints</div></div>
+      <div class="stat"><div class="v">3</div><div class="k">event types</div></div>
     </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<!-- ============ 01 ============ -->
+<section id="topology">
+  <h2>01 — Topology</h2>
+  <div class="h">Two processes that never import each other</div>
+
+  <p>
+    A <code>docker build</code> can take minutes and saturate a core. Run it inside the API
+    process and it blocks the event loop, stalling every other request. So the build lives
+    in its own process. The price of that split is that the worker has no access to the
+    Socket.IO server, which is the exact problem the streaming layer solves.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Process</th><th>Started by</th><th>Entry</th><th>Owns</th></tr></thead>
+    <tbody>
+      <tr><td><strong>API server</strong></td><td><code>npm run dev</code></td><td><code>server.js</code></td><td>REST, JWT auth, Socket.IO, the Redis <strong>subscriber</strong></td></tr>
+      <tr><td><strong>Build worker</strong></td><td><code>npm run worker</code></td><td><code>buildWorker.js</code></td><td>queue consumer, Docker, AWS, the Redis <strong>publisher</strong></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="dia">
+    <div class="mermaid">
+flowchart TB
+    subgraph API["API SERVER · server.js :8000"]
+        EX["Express + Socket.IO"]
+        SUB["Redis subscriber"]
+    end
+    subgraph WK["BUILD WORKER · buildWorker.js"]
+        LOOP["while true: BRPOP"]
+        PUB["Redis publisher"]
+    end
+    REDIS[("REDIS<br/>list build-queue<br/>chan deployment:events")]
+    MONGO[("MONGODB<br/>users · projects · deployments<br/>sessions · otps")]
+    AWS["Docker CLI · ECR · ECS · ELBv2 · git"]
+    BROWSER(["Browser"])
+
+    BROWSER -->|REST + WebSocket| EX
+    EX -->|LPUSH| REDIS
+    REDIS -->|BRPOP| LOOP
+    LOOP --> AWS
+    PUB -->|PUBLISH| REDIS
+    REDIS -->|SUBSCRIBE| SUB
+    SUB -->|io.to room| BROWSER
+    EX <--> MONGO
+    LOOP <--> MONGO
+    </div>
+    <div class="cap">They share MongoDB and Redis. Nothing else.</div>
+  </div>
+
+  <div class="note">
+    <div class="t">Why the Docker CLI, not a Docker SDK</div>
+    <p><code>child_process.spawn</code> hands back raw stdout and stderr chunks. Those go
+    straight into the logger, which is what makes live build output cheap to implement.</p>
+  </div>
+</section>
+
+<!-- ============ 02 ============ -->
+<section id="api">
+  <h2>02 — API server</h2>
+  <div class="h">Middleware order is load-bearing</div>
+
+  <div class="grid">
+    <div class="card"><h5><span class="num">1</span> cors</h5><p>First, so a preflight <code>OPTIONS</code> short-circuits before body parsing. <code>credentials:true</code> is what lets the httpOnly refresh cookie travel cross-origin.</p></div>
+    <div class="card"><h5><span class="num">2</span> express.json</h5><p>Its <code>verify</code> hook stashes the untouched bytes on <code>req.rawBody</code>. GitHub signs those exact bytes.</p></div>
+    <div class="card"><h5><span class="num">3</span> morgan</h5><p>Request logging in dev format.</p></div>
+    <div class="card"><h5><span class="num">4</span> cookieParser</h5><p>Parses the refresh cookie for the three auth endpoints that read it.</p></div>
+  </div>
+
+  <h3>Complete route inventory</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Method</th><th>Path</th><th>Guard</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td>POST</td><td><code>/api/auth/register</code></td><td>—</td><td>409 on duplicate username or email, else creates the user and emails an OTP</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/login</code></td><td>—</td><td>401 if unverified or bad credentials</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/verify-email</code></td><td>—</td><td>consumes the OTP and <strong>returns an access token</strong></td></tr>
+      <tr><td>GET</td><td><code>/api/auth/me</code></td><td>JWT</td><td>current user</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/refresh</code></td><td>cookie</td><td>rotates the refresh token</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/logout</code></td><td>cookie</td><td>revokes one session</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/logout-all</code></td><td>cookie</td><td>revokes every session for the user</td></tr>
+      <tr><td>POST</td><td><code>/api/project</code></td><td>JWT</td><td>create, then immediately deploy</td></tr>
+      <tr><td>GET</td><td><code>/api/project</code></td><td>JWT</td><td>list, each with <code>latestDeployment</code></td></tr>
+      <tr><td>GET</td><td><code>/api/project/:project_id</code></td><td>JWT</td><td>one project with <code>latestDeployment</code></td></tr>
+      <tr><td>DELETE</td><td><code>/api/project/:project_id</code></td><td>JWT</td><td>AWS teardown, then cascade delete</td></tr>
+      <tr><td>GET</td><td><code>/api/project/:project_id/deployments</code></td><td>JWT</td><td>last 30, logs excluded</td></tr>
+      <tr><td>POST</td><td><code>/api/project/:project_id/redeploy</code></td><td>JWT</td><td>409 if a build is in flight</td></tr>
+      <tr><td>GET</td><td><code>/api/deployment/:deployment_id</code></td><td>JWT</td><td>one deployment <strong>with full logs</strong></td></tr>
+      <tr><td>POST</td><td><code>/api/webhook/github</code></td><td>HMAC</td><td>ping and non-push return 200 and stop</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <div class="t">404, never 403</div>
+    <p>Every project and deployment query filters on the caller's id. There is no separate
+    authorization layer, so an id you do not own returns 404. The API never confirms that
+    someone else's resource exists.</p>
+  </div>
+
+  <h3>Two tokens</h3>
+  <div class="tw"><table>
+    <thead><tr><th></th><th>Access token</th><th>Refresh token</th></tr></thead>
+    <tbody>
+      <tr><td>Lifetime</td><td>15 minutes</td><td>7 days</td></tr>
+      <tr><td>Carried in</td><td><code>Authorization: Bearer</code></td><td>httpOnly cookie</td></tr>
+      <tr><td>Payload</td><td><code>{ id, sessionId }</code></td><td><code>{ id }</code></td></tr>
+      <tr><td>Stored server-side</td><td>no</td><td>SHA-256 hash on a <code>Session</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    The refresh token is <strong>rotated on every use</strong>. Calling refresh writes a new
+    hash onto the same session document and re-issues the cookie, so a stolen refresh token
+    dies at the next legitimate refresh. Cookie flags come from one helper, and
+    <code>secure</code> is production-gated because Safari silently drops Secure cookies over
+    <code>http://localhost</code>.
+  </p>
+</section>
+
+<!-- ============ 03 ============ -->
+<section id="models">
+  <h2>03 — Data model</h2>
+  <div class="h">Project holds now. Deployment holds history.</div>
+
+  <p>
+    That split is the single most important structural decision in the codebase. Without a
+    separate <code>Deployment</code> entity there is no build history, no per-commit detail,
+    no replayable logs, and no way to tell a finished build from a running one.
+  </p>
+
+  <div class="dia">
+    <div class="mermaid">
+erDiagram
+    USER ||--o{ PROJECT : owns
+    USER ||--o{ SESSION : has
+    USER ||--o{ OTP : has
+    PROJECT ||--o{ DEPLOYMENT : "builds"
+    USER ||--o{ DEPLOYMENT : "owner (denormalized)"
+
+    USER {
+        string username UK
+        string email UK
+        string password "select false"
+        bool verified
+        string githubUsername
+    }
+    PROJECT {
+        string name UK "DNS label"
+        string repoUrl "no .git"
+        string branch
+        string webhookSecret
+        enum status
+        string ecrImageUri
+        string ecsServiceArn
+        string albTargetGroupArn
+        string albListenerRuleArn
+        string liveUrl
+    }
+    DEPLOYMENT {
+        enum status
+        enum trigger "MANUAL WEBHOOK"
+        string commitHash
+        string commitMessage
+        array steps "5 rows"
+        array logs "capped 2000"
+        string errorMessage
+        date startedAt
+        date finishedAt
+    }
+    SESSION {
+        string refreshTokenHash
+        string ip
+        string userAgent
+        bool revoked
+    }
+    OTP {
+        string otpHash
+        date createdAt "TTL 300s"
+    }
+    </div>
+    <div class="cap">Five collections. Both hashes are SHA-256; no secret is stored in plaintext.</div>
+  </div>
+
+  <h3>Three fields worth stopping on</h3>
+
+  <div class="grid">
+    <div class="card">
+      <h5>Project.name</h5>
+      <p>Constrained to <code>/^[a-z0-9-]+$/</code> because it becomes the DNS label in
+      <code>&lt;name&gt;.&lt;domain&gt;</code>. Unique <strong>globally</strong>, not per owner,
+      since subdomains are a global namespace.</p>
+    </div>
+    <div class="card">
+      <h5>Deployment.owner</h5>
+      <p>Denormalized from the project so both the REST check and the socket room check are
+      one indexed query with no <code>populate</code>.</p>
+    </div>
+    <div class="card">
+      <h5>Deployment.steps</h5>
+      <p>Pre-populated by a schema default, so all five rows exist as <code>pending</code> the
+      moment the record is created. The stepper renders before the worker even wakes up.</p>
+    </div>
+  </div>
+
+  <p>
+    Step status has five values, not three: <span class="pill">pending</span>
+    <span class="pill">running</span> <span class="pill on">success</span>
+    <span class="pill bad">failed</span> <span class="pill off">skipped</span>
+  </p>
+</section>
+
+<!-- ============ 04 ============ -->
+<section id="auth">
+  <h2>04 — Signup flow</h2>
+  <div class="h">Registration deliberately returns no token</div>
+
+  <div class="dia">
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant API as API server
+    participant DB as MongoDB
+    participant G as Gmail OAuth2
+
+    C->>API: POST /auth/register
+    API->>DB: findOne username OR email
+    API->>API: bcrypt.hash(password, salt 10)
+    API->>DB: create User (verified false)
+    API->>DB: create Otp { sha256(otp), TTL 300s }
+    API->>G: send the 6-digit code
+    API-->>C: 201 — no token
+
+    C->>API: POST /auth/verify-email
+    API->>DB: findOne Otp by { sha256(otp), email }
+    API->>DB: User.verified = true
+    API->>DB: deleteMany Otp for user
+    API->>DB: create Session (sha256 of refresh token)
+    API-->>C: 200 + accessToken + httpOnly cookie
+    </div>
+    <div class="cap">Verification is the only door into an authenticated state for a new account.</div>
+  </div>
+
+  <p>
+    Login rejects an unverified user with 401, and registration hands back nothing. So
+    <code>handleVerifyEmail</code> creates the session and returns an access token itself.
+    Without that, a user would verify their email and then be bounced to a login form.
+  </p>
+
+  <div class="note">
+    <div class="t">The OTP is hashed too</div>
+    <p>Only <code>sha256(otp)</code> is stored. The document carries <code>expires: 300</code>
+    on <code>createdAt</code>, so MongoDB's TTL monitor deletes it about five minutes later
+    with no application code involved.</p>
+  </div>
+</section>
+
+<!-- ============ 05 ============ -->
+<section id="create">
+  <h2>05 — Create a project</h2>
+  <div class="h">Created and queued in one request</div>
+
+  <div class="dia">
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant API as API server
+    participant DB as MongoDB
+    participant R as Redis
+
+    C->>API: POST /api/project { name, repoUrl, branch }
+    API->>DB: findOne Project by name
+    Note over API: 409 if taken — name is globally unique
+    API->>API: webhookSecret = randomBytes(20).hex
+    API->>DB: create Project (QUEUED, repoUrl minus .git)
+    API->>DB: create Deployment (QUEUED, 5 pending steps)
+    API->>R: LPUSH build-queue
+    API-->>C: 201 { project, deployment }
+    </div>
+  </div>
+
+  <ul>
+    <li><strong>The .git suffix is stripped at write time</strong>, so webhook lookups later have one canonical form to match.</li>
+    <li><strong>Status is QUEUED, never IDLE.</strong> <code>IDLE</code> is the schema default but the create path skips it, because a project always builds the moment it exists.</li>
+    <li><strong>A failed enqueue fails both records.</strong> Nothing is left sitting in <code>QUEUED</code> waiting for a job that was never posted.</li>
+  </ul>
+
+  <p>The deployment comes back in the response so the client can navigate straight into a
+  live build view without a second request.</p>
+</section>
+
+<!-- ============ 06 ============ -->
+<section id="pipeline">
+  <h2>06 — Build pipeline</h2>
+  <div class="h">One worker, one job, five steps</div>
+
+<pre><code>API                 Redis list "build-queue"                 Worker
+ |                                                             |
+ +-- LPUSH ---------&gt; [ job ]                                   |
+ |                        |&lt;--------------- BRPOP (timeout 0) --+ blocks</code></pre>
+
+  <p>
+    <code>BRPOP</code> with a timeout of <code>0</code> blocks indefinitely, so the worker
+    burns no CPU while idle and there is no polling interval to tune. <code>LPUSH</code> at the
+    head plus <code>BRPOP</code> at the tail makes the list FIFO. The loop handles
+    <strong>one job at a time, globally</strong> — not one per project. That is precisely why
+    redeploy returns 409 on a concurrent build: two jobs would race on the same workspace
+    directory.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Step</th><th>Service</th><th>What actually happens</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>CLONE</code></td><td>simple-git</td><td>wipe and recreate <code>workspace/&lt;id&gt;</code>, then <code>git clone --branch &lt;b&gt; --depth 1</code></td></tr>
+      <tr><td>2</td><td><code>DOCKERFILE</code></td><td>docker.service</td><td>an existing Dockerfile is left alone; otherwise detect the runtime and write one</td></tr>
+      <tr><td>3</td><td><code>BUILD</code></td><td>docker.service</td><td><code>docker build --platform=linux/amd64 --progress=plain</code>, 10-minute timeout</td></tr>
+      <tr><td>4</td><td><code>PUSH</code></td><td>ecr.service</td><td>auth token, <code>docker login --password-stdin</code>, ensure repo, tag, push</td></tr>
+      <tr><td>5</td><td><code>DEPLOY</code></td><td>ecs + alb</td><td>register a task definition, then branch on <code>ALB_ENABLED</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    <code>currentStep</code> is tracked in a plain variable across the whole <code>try</code>
+    block, so a throw anywhere marks exactly the right step failed before the deployment goes
+    <code>FAILED</code>.
+  </p>
+
+  <h3>Runtime detection</h3>
+  <p>A fixed precedence chain, first match wins.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Probe file</th><th>Base image</th><th>Start command</th></tr></thead>
+    <tbody>
+      <tr><td><code>Dockerfile</code></td><td>—</td><td>untouched, generation skipped entirely</td></tr>
+      <tr><td><code>package.json</code></td><td><code>node:18-alpine</code></td><td><code>npm start</code>, else <code>node &lt;main&gt;</code></td></tr>
+      <tr><td><code>requirements.txt</code></td><td><code>python:3.12-slim</code></td><td><code>python &lt;entry&gt;</code>, or Django's runserver</td></tr>
+      <tr><td><code>go.mod</code></td><td><code>golang:1.20-alpine</code> to <code>alpine</code></td><td><code>./main</code>, multi-stage, <code>CGO_ENABLED=0</code></td></tr>
+      <tr><td>none</td><td>—</td><td>throws; the build fails at step 2</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    Python entry-point detection is the only heuristic. One <code>.py</code> file wins
+    outright; otherwise each is scanned for a <code>__main__</code> block, a <code>.run(</code>,
+    <code>uvicorn</code>, <code>Flask(__name__)</code> or <code>FastAPI()</code>, falling back
+    to <code>main.py</code>.
+  </p>
+
+  <div class="note">
+    <div class="t">Port 8080 is a three-file contract</div>
+    <p>Every generated Dockerfile ends with <code>ENV PORT=8080</code> and
+    <code>EXPOSE 8080</code>, because <code>CONTAINER_PORT</code> in the ALB service is 8080
+    and the ECS task definition maps that port. Change one and all three must move.</p>
+  </div>
+
+  <h4>Three deliberate flags</h4>
+  <ul>
+    <li><code>--platform=linux/amd64</code> is not optional on Apple Silicon. Fargate runs x86, and an arm64 image pushes fine then fails to start.</li>
+    <li><code>--progress=plain</code> forces line-based output. BuildKit's default emits TTY redraw sequences that capture badly into a log record.</li>
+    <li><code>docker build</code> writes progress to <strong>stderr</strong> under normal operation, so the worker labels that stream <code>stdout</code> anyway rather than painting a healthy build red.</li>
+  </ul>
+
+  <p>
+    On the push side, the ECR password is piped through <code>--password-stdin</code> and never
+    passed as an argument, so it cannot appear in the process list. That login is also the one
+    Docker call made <strong>without</strong> a log sink, because it prints a credential-storage
+    warning that has no business in a user-visible build log.
+  </p>
+</section>
+
+<!-- ============ 07 ============ -->
+<section id="deploy">
+  <h2>07 — Two deploy paths</h2>
+  <div class="h">A supervised service, or a one-shot task</div>
+
+  <p>
+    The task definition is identical either way: Fargate, <code>awsvpc</code>, 256 CPU units,
+    512 MB, a container named <code>user-app-container</code> on port 8080, logging to
+    <code>/ecs/vercel-clone</code>. That container name is not arbitrary — <code>CreateService</code>
+    names a container and port pair in its <code>loadBalancers</code> block, and a mismatch is
+    rejected with an opaque validation error.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h5>ALB off</h5>
+      <p><code>RunTask</code> with a public IP. Nothing supervises it, nothing restarts it,
+      the IP changes every deploy, and <code>liveUrl</code> stays null. The UI shows
+      "URL pending".</p>
+    </div>
+    <div class="card">
+      <h5>ALB on</h5>
+      <p>An ECS <strong>service</strong> behind a shared load balancer. Supervised, restarted
+      on crash, rolled without downtime, reachable at a stable subdomain.</p>
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="t">Running without a load balancer is supported, not broken</div>
+    <p>An ALB bills roughly $16 a month from the moment it exists. Working without one has to
+    stay a first-class path, which is why the whole feature sits behind one flag.</p>
+  </div>
+
+  <h3>The routing shape</h3>
+  <div class="dia">
+    <div class="mermaid">
+flowchart TB
+    B(["browser<br/>Host: blog.example.xyz"]) --> ALB["ONE shared ALB<br/>listener :80"]
+    ALB -->|prio 10 · Host=blog| TG1["target group<br/>lb-blog-a1b2c3d4 :8080"]
+    ALB -->|prio 11 · Host=shop| TG2["target group<br/>lb-shop-e5f6a7b8 :8080"]
+    ALB -->|default| X["404"]
+    TG1 --> T1["10.0.1.55:8080<br/>ECS service"]
+    TG2 --> T2["10.0.2.31:8080<br/>ECS service"]
+    </div>
+    <div class="cap">One target group and one listener rule per project. Private task IPs, registered by ECS itself.</div>
+  </div>
+
+  <h3>Why a service and not a task</h3>
+  <p>
+    A service registers the task's private IP into the target group on start and deregisters
+    it on stop, automatically. Doing that by hand would break the first time a task restarted
+    with a new IP.
+  </p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Setting</th><th>Value</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Target group name</td><td><code>lb-&lt;20 chars&gt;-&lt;8 hex&gt;</code></td><td>32-char AWS cap; the sha1 of the project id prevents truncation collisions and stays stable across redeploys</td></tr>
+      <tr><td>TargetType</td><td><code>ip</code></td><td>Fargate tasks get their own network interface, so there is no instance to register</td></tr>
+      <tr><td>Health check</td><td><code>/</code>, 15s, 2 checks</td><td>tighter than the AWS default of 30s and 5, so a demo goes live in ~30s instead of ~2.5 min</td></tr>
+      <tr><td>Matcher</td><td><code>200-399</code></td><td>plenty of apps answer <code>/</code> with a 302 to <code>/login</code>; a strict 200 marks those unhealthy forever</td></tr>
+      <tr><td>Deregistration delay</td><td>5s</td><td>the AWS default of 300s makes deleting a project look like it hung for five minutes</td></tr>
+      <tr><td>Healthy / max percent</td><td>100 / 200</td><td>the old task keeps serving until the new one is healthy — zero downtime, at the cost of a second task for about a minute</td></tr>
+      <tr><td>Grace period</td><td>60s</td><td>without it a slow-booting app is marked unhealthy, killed, and crash-loops on an app that would have been fine</td></tr>
+      <tr><td>Circuit breaker</td><td>enable + rollback</td><td>gives up on a crash-looping deploy and restores the previous version</td></tr>
+      <tr><td>forceNewDeployment</td><td>true</td><td>forces a re-pull of <code>:latest</code> even when the task definition ARN is unchanged</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    Both <code>ensureTargetGroup</code> and <code>ensureListenerRule</code> are idempotent,
+    because a redeploy calls them again. The rule function has a third branch that is easy to
+    miss and matters most: if a rule for the host exists but forwards to a
+    <strong>different</strong> target group, it is repointed. Without that, recreating a target
+    group leaves the old rule holding a dead ARN and every request 503s.
+  </p>
+
+  <p>
+    Priorities 1 through 9 are reserved for future platform rules. Project rules start at 10,
+    and <code>findFreePriority</code> reuses gaps left by deleted projects rather than marching
+    toward the 100-rule listener ceiling.
+  </p>
+
+  <h3>The health wait</h3>
+  <div class="dia">
+    <div class="mermaid">
+flowchart TD
+    S["waitForRoutableService<br/>poll every 10s, up to 3 min"] --> Q{"healthy targets?"}
+    Q -->|yes| OK["log the count, return<br/>→ READY + liveUrl"]
+    Q -->|no| R{"rolloutState<br/>FAILED?"}
+    R -->|yes| RB["circuit breaker already rolled back<br/>dump 5 ECS events, throw"]
+    R -->|no| T{"3 minutes<br/>elapsed?"}
+    T -->|no| W["log only if the summary changed"] --> S
+    T -->|yes| TO["re-query both sources<br/>throw naming port 8080 and 2xx/3xx"]
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="t">The distinction this enforces</div>
+    <p>"ECS started the task" and "the app is reachable" are different claims, and only the
+    second justifies <code>READY</code>. A container that boots but never binds its port looks
+    perfectly healthy from ECS's side while the ALB serves 503. Target health is the real
+    signal.</p>
+  </div>
+
+  <p>
+    The three ARNs are written to the project <strong>before</strong> the health wait, not
+    after, so a build that times out still leaves enough state behind for deletion to clean up
+    what it provisioned. Progress lines are deduplicated against the previous summary, since at
+    a 10-second cadence a repeated identical line would bury everything interesting.
+  </p>
+</section>
+
+<!-- ============ 08 ============ -->
+<section id="stream">
+  <h2>08 — Log streaming</h2>
+  <div class="h">Realtime and durability have different latency budgets</div>
+
+  <div class="dia">
+    <div class="mermaid">
+flowchart LR
+    D["docker build<br/>stdout / stderr chunk"] --> L["logger.log()"]
+    L --> A["stripAnsi<br/>split on CRLF or bare CR"]
+    A --> BUF["buffer"]
+    A --> P["PUBLISH<br/>immediately, per line"]
+    BUF -->|50 lines or 1s| M[("MongoDB<br/>$push $slice -2000")]
+    P --> R[("Redis<br/>deployment:events")]
+    R --> S["API server subscriber<br/>duplicated connection"]
+    S --> IO["io.to('project:id')<br/>emit deployment:event"]
+    IO --> B(["browser"])
+    </div>
+    <div class="cap">One path optimizes for latency, the other for cost. They are deliberately not the same path.</div>
+  </div>
+
+  <p>
+    Docker output is chatty. Writing each line to MongoDB individually would be hundreds of
+    round trips per build. So publishing is immediate and per-line, while Mongo writes are
+    batched at whichever comes first of 1 second or 50 lines, capped at the last 2000 lines by
+    <code>$slice</code>.
+  </p>
+
+  <p>
+    <code>flush()</code> chains onto a promise rather than firing concurrently, so overlapping
+    callers cannot interleave batches out of order, and it is awaitable so the worker's
+    <code>finally</code> block can guarantee the tail of a log is never lost.
+  </p>
+
+  <h3>Three event types, one channel</h3>
+  <div class="tw"><table>
+    <thead><tr><th>type</th><th>Extra fields</th><th>Drives</th></tr></thead>
+    <tbody>
+      <tr><td><code>log</code></td><td><code>line</code>, <code>stream</code></td><td>the terminal panel</td></tr>
+      <tr><td><code>step</code></td><td><code>step</code>, <code>status</code></td><td>the five-stage stepper and its per-step timers</td></tr>
+      <tr><td><code>status</code></td><td><code>status</code>, <code>liveUrl</code>, <code>errorMessage</code></td><td>badges, the live link, query invalidation</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <div class="t">Flush before publishing a terminal status</div>
+    <p><code>status()</code> updates the deployment, mirrors the status onto the project,
+    <code>await flush()</code> if terminal, and only then publishes. Clients refetch when they
+    see READY or FAILED, so anything still in the buffer would be missed. It is also why the
+    worker logs "Deployment complete." <em>before</em> calling <code>status("READY")</code>.</p>
+  </div>
+
+  <h3>The socket layer does three things</h3>
+  <div class="grid">
+    <div class="card"><h5><span class="num">1</span> Handshake auth</h5><p>Verifies <code>handshake.auth.token</code> with the same secret as the REST middleware and pins <code>socket.userId</code>. Invalid tokens are rejected at connect.</p></div>
+    <div class="card"><h5><span class="num">2</span> Ownership-checked rooms</h5><p><code>subscribe:project</code> matches the id <strong>and</strong> the owner before joining. Without it any logged-in user could read anyone's build logs.</p></div>
+    <div class="card"><h5><span class="num">3</span> The Redis bridge</h5><p>A <code>duplicate()</code> connection, because ioredis rejects ordinary commands on a subscriber. The <code>lpush</code>/<code>brpop</code> client cannot be reused.</p></div>
+  </div>
+
+  <p>
+    ANSI stripping happens server-side, so the database stays clean and the frontend needs no
+    ANSI library at all. The splitter also handles a bare carriage return, which is how progress
+    bars overwrite themselves in place.
+  </p>
+
+  <p>
+    <strong>Replay</strong> is what makes a mid-build refresh work.
+    <code>GET /api/deployment/:id</code> is the only endpoint that returns logs; the frontend
+    calls it on mount to seed state, then lets the socket take over. A build that finished last
+    week still renders its complete stepper and output.
+  </p>
+</section>
+
+<!-- ============ 09 ============ -->
+<section id="webhook">
+  <h2>09 — GitHub webhook</h2>
+  <div class="h">Authenticated by HMAC instead of JWT</div>
+
+  <div class="dia">
+    <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant GH as GitHub
+    participant API as API server
+    participant DB as MongoDB
+    participant R as Redis
+
+    GH->>API: POST /api/webhook/github
+    Note over GH,API: x-github-event · x-hub-signature-256
+    API->>API: ping or non-push → 200 and stop
+    API->>DB: findOne Project { repoUrl in [url, url.git], branch }
+    Note over API,DB: no match → 404
+    API->>API: HMAC-SHA256 over req.rawBody with project.webhookSecret
+    Note over API: mismatch → 401
+    API->>DB: Project.status = QUEUED
+    API->>DB: create Deployment (WEBHOOK + commit metadata)
+    API->>R: LPUSH build-queue
+    API-->>GH: 200 { project_id, deploymentId }
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h5>Raw bytes, not JSON</h5><p>The signature is computed over <code>req.rawBody</code>. Re-serializing the parsed object can reorder keys or change unicode escaping and fail a legitimate signature.</p></div>
+    <div class="card"><h5>Timing-safe compare</h5><p><code>timingSafeEqual</code> throws on a length mismatch, so lengths are checked first and an early <code>false</code> returned.</p></div>
+    <div class="card"><h5>Project first, then signature</h5><p>The secret is per-project and lives on the document. There is no global webhook secret to check against.</p></div>
+    <div class="card"><h5>Both URL forms</h5><p>Matched with and without <code>.git</code>, since users paste both. The branch must match too, so a push to an untracked branch is a 404.</p></div>
+  </div>
+
+  <div class="note">
+    <div class="t">Non-push events return 200, not 400</div>
+    <p>GitHub disables webhooks that repeatedly return errors, and "I do not care about this
+    event" is not a failure.</p>
+  </div>
+</section>
+
+<!-- ============ 10 ============ -->
+<section id="teardown">
+  <h2>10 — Delete and teardown</h2>
+  <div class="h">AWS mandates the order</div>
+
+  <p>A target group in use by a service, or referenced by a rule, cannot be deleted.</p>
+
+  <div class="dia">
+    <div class="mermaid">
+flowchart TB
+    A["deleteECSService(force: true)"] --> B["wait 8 seconds<br/>DRAIN_WAIT_MS"]
+    B --> C["deleteListenerRuleByArn"]
+    C --> D["deleteTargetGroupByArn"]
+    D --> E["Project.deleteOne()"]
+    E --> F["Deployment.deleteMany({ project })"]
+    A -.->|catch| W["push a warning<br/>never throw"]
+    C -.->|catch| W
+    D -.->|catch| W
+    W -.-> E
+    </div>
+    <div class="cap">Every AWS failure becomes a warning in the response. None of them block the Mongo delete.</div>
+  </div>
+
+  <div class="note">
+    <div class="t">The asymmetry that drives this design</div>
+    <p>A leaked listener rule can be removed by hand from the console. A project that cannot
+    be deleted is stuck in the user's dashboard forever. So the AWS teardown never throws, and
+    the warnings are returned rather than swallowed, because each leaked rule consumes one of
+    the listener's 100 slots.</p>
+  </div>
+
+  <ul>
+    <li>Both delete helpers swallow their not-found exceptions, so a half-finished earlier attempt cannot permanently block a retry.</li>
+    <li>The 8-second drain only runs if a service actually existed.</li>
+    <li>A project with no AWS resources at all returns from the guard clause immediately, making zero AWS calls.</li>
+    <li>The controller reads before deleting rather than using <code>findOneAndDelete</code>: the ARNs live on the document, and the project must stay visible during the drain while its container is still serving traffic.</li>
+  </ul>
+</section>
+
+<!-- ============ 11 ============ -->
+<section id="state">
+  <h2>11 — State, timing and failure</h2>
+  <div class="h">One state machine, kept in lockstep</div>
+
+  <div class="dia">
+    <div class="mermaid">
+stateDiagram-v2
+    [*] --> QUEUED: create · redeploy · webhook push
+    QUEUED --> BUILDING: worker picks up the job
+    BUILDING --> DEPLOYING: ECR push done (ALB path only)
+    BUILDING --> READY: no-ALB path
+    DEPLOYING --> READY: target passes health checks
+    BUILDING --> FAILED: clone, dockerfile, build or push threw
+    DEPLOYING --> FAILED: rollback or 3-minute timeout
+    QUEUED --> FAILED: enqueue failed, or watchdog
+    READY --> QUEUED: next push or redeploy
+    FAILED --> QUEUED: next push or redeploy
+    </div>
+    <div class="cap">DEPLOYING exists only on the ALB path. Project.status is mirrored from Deployment.status by logger.status().</div>
+  </div>
+
+  <h3>Every timing constant</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Constant</th><th>Value</th><th>Where</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>access token TTL</td><td>15 min</td><td>auth.controller</td><td>short-lived bearer</td></tr>
+      <tr><td>refresh token TTL</td><td>7 days</td><td>auth.controller</td><td>cookie maxAge matches</td></tr>
+      <tr><td>OTP TTL</td><td>300s</td><td>otp.model</td><td>MongoDB TTL index</td></tr>
+      <tr><td><code>FLUSH_INTERVAL_MS</code></td><td>1000</td><td>log.service</td><td>log batch timer</td></tr>
+      <tr><td><code>FLUSH_LINE_COUNT</code></td><td>50</td><td>log.service</td><td>log batch size</td></tr>
+      <tr><td><code>MAX_LOG_LINES</code></td><td>2000</td><td>deployment.model</td><td><code>$slice</code> cap</td></tr>
+      <tr><td>docker build timeout</td><td>10 min</td><td>docker.service</td><td>spawn timeout</td></tr>
+      <tr><td><code>HEALTH_POLL_INTERVAL_MS</code></td><td>10s</td><td>buildWorker</td><td>health poll cadence</td></tr>
+      <tr><td><code>HEALTH_TIMEOUT_MS</code></td><td>3 min</td><td>buildWorker</td><td>give up on health</td></tr>
+      <tr><td><code>STALE_AFTER_MS</code></td><td>15 min</td><td>buildWorker</td><td>watchdog cutoff <strong>and</strong> interval</td></tr>
+      <tr><td><code>DRAIN_WAIT_MS</code></td><td>8s</td><td>project.controller</td><td>drain before target group delete</td></tr>
+      <tr><td>health check interval</td><td>15s x 2</td><td>alb.service</td><td>about 30s to healthy</td></tr>
+      <tr><td>deregistration delay</td><td>5s</td><td>alb.service</td><td>fast teardown</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    The 3-minute health timeout sits comfortably inside the 15-minute watchdog window, so a
+    health failure surfaces as a real diagnosable error rather than being swept up by the
+    watchdog.
+  </p>
+
+  <h3>The watchdog</h3>
+  <p>
+    <code>cleanStaleBuilds()</code> runs once at worker startup and then every 15 minutes,
+    force-failing anything untouched past the cutoff. It casts a wider net over deployments
+    (<code>QUEUED</code> included) than projects, because a job can be enqueued and then
+    stranded if the worker dies before picking it up. Both must be cleaned — resetting only the
+    project would leave a deployment spinning forever in the UI.
+  </p>
+
+  <h3>Failure matrix</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Failure</th><th>Detected by</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Redis down at enqueue</td><td><code>createDeployment</code> catch</td><td>both records FAILED, error surfaced to the caller</td></tr>
+      <tr><td>Clone fails</td><td>worker try/catch</td><td>step CLONE failed</td></tr>
+      <tr><td>No recognizable runtime</td><td>generator throws</td><td>step DOCKERFILE failed</td></tr>
+      <tr><td>Docker build error</td><td>non-zero exit code</td><td>step BUILD failed, output already streamed</td></tr>
+      <tr><td>ECR auth or push failure</td><td>AWS SDK throws</td><td>step PUSH failed</td></tr>
+      <tr><td>App never binds :8080</td><td>3-minute health timeout</td><td>step DEPLOY failed, ECS events in the log</td></tr>
+      <tr><td>Container crash-loops</td><td><code>rolloutState: FAILED</code></td><td>circuit breaker rolls back, step DEPLOY failed</td></tr>
+      <tr><td>Worker dies mid-build</td><td>watchdog, within 15 min</td><td>project and deployment both FAILED</td></tr>
+      <tr><td>Redis publish fails</td><td>caught in <code>publish()</code></td><td>logged and ignored</td></tr>
+      <tr><td>Mongo log write fails</td><td>caught in <code>writeBatch</code></td><td>logged and ignored</td></tr>
+      <tr><td>AWS teardown fails</td><td>per-call catch</td><td>warnings returned, Mongo delete proceeds</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note">
+    <div class="t">The rule underneath all of it</div>
+    <p>Observability failures are swallowed. Pipeline failures are propagated. A build must
+    never die because a log line could not be persisted.</p>
+  </div>
+</section>
+
+<!-- ============ 12 ============ -->
+<section id="config">
+  <h2>12 — Config and the feature gate</h2>
+  <div class="h">Eleven variables, or the server does not boot</div>
+
+  <p>
+    <code>config.js</code> throws at import time if <code>MONGO_URI</code>, <code>PORT</code>,
+    <code>JWT_SECRET</code>, the four <code>GOOGLE_*</code> or the four core <code>AWS_*</code>
+    variables are missing. Failing at boot is deliberate: a missing secret surfaces immediately
+    instead of as a confusing 500 hours later. <code>FRONTEND_URL</code>,
+    <code>AWS_REGION</code> and <code>AWS_ECS_CLUSTER_NAME</code> are defaulted instead of
+    required, and <code>REDIS_URL</code> is read straight from <code>process.env</code> inside
+    <code>config/redis.js</code>.
+  </p>
+
+<pre><code>ALB_REQUIRED_KEYS = ["AWS_VPC_ID", "AWS_ALB_LISTENER_ARN", "PLATFORM_DOMAIN"]
+config.ALB_ENABLED = ALB_REQUIRED_KEYS.every(present)</code></pre>
+
+  <p>One flag for the whole feature, so no caller re-checks three variables and drifts out of
+  sync about which ones matter. The warning logic is the interesting part.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>State</th><th>Behavior</th></tr></thead>
+    <tbody>
+      <tr><td><span class="pill on">all three present</span></td><td>silent — subdomain routing active</td></tr>
+      <tr><td><span class="pill off">all three absent</span></td><td>silent — deploys work, <code>liveUrl</code> stays null</td></tr>
+      <tr><td><span class="pill bad">one or two present</span></td><td><code>console.warn</code> at boot</td></tr>
+    </tbody>
+  </table></div>
+
+  <p>
+    Only the half-configured case warns, because that is the one that surfaces later as an
+    opaque AWS validation error from inside a build. Fully off is a supported configuration,
+    not a broken one. <code>alb.service.js</code> defends independently with
+    <code>assertAlbEnabled()</code> at the top of every AWS-touching function.
+  </p>
+</section>
+
+<!-- ============ 13 ============ -->
+<section id="edges">
+  <h2>13 — Sharp edges</h2>
+  <div class="h">Known gaps, none of them breaking normal use</div>
+
+  <div class="note danger">
+    <div class="t">1 · liveUrl is https, the listener is http</div>
+    <p><code>buildLiveUrl</code> returns <code>https://</code>, while its own doc comment says
+    the opposite and <code>ALB-SETUP.md</code> provisions only an <code>HTTP:80</code> listener.
+    As written, every <code>liveUrl</code> handed to the UI points at a scheme nothing is
+    listening on until a :443 listener with a certificate exists.</p>
+  </div>
+
+  <div class="note warn">
+    <div class="t">2 · ecsServiceArn holds a name, not an ARN</div>
+    <p>The worker writes <code>serviceName</code> into it and <code>deleteECSService</code>
+    correctly expects a name. Only the field name is misleading.</p>
+  </div>
+
+  <div class="note warn">
+    <div class="t">3 · models/user.js is dead code</div>
+    <p>A near-duplicate of <code>user.model.js</code> that nothing imports. Both call
+    <code>mongoose.model('User')</code>, so importing the wrong one would raise
+    <code>OverwriteModelError</code>.</p>
+  </div>
+
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Gap</th><th>Consequence</th></tr></thead>
+    <tbody>
+      <tr><td>4</td><td>Deletion never removes the ECR repository</td><td>billable image storage accumulates per project, forever</td></tr>
+      <tr><td>5</td><td>A new task definition revision on every build</td><td>old revisions are never deregistered</td></tr>
+      <tr><td>6</td><td>Project names are globally unique</td><td>one user can permanently take <code>blog</code> from everyone</td></tr>
+      <tr><td>7</td><td>A <code>docker login</code> per build</td><td>the ECR token is valid 12 hours and is not cached</td></tr>
+      <tr><td>8</td><td>No worker concurrency at all</td><td>a slow build blocks every other user; scaling needs a per-job workspace path</td></tr>
+      <tr><td>9</td><td><code>GOOGLE_*</code> is required to boot</td><td>the API will not start without email credentials, even with no signups</td></tr>
+      <tr><td>10</td><td>The socket authenticates once, at connect</td><td>a socket outlives its 15-minute token while REST calls do not</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<!-- ============ 14 ============ -->
+<section id="files">
+  <h2>14 — File map</h2>
+  <div class="h">What each file is responsible for</div>
+
+<pre><code>backend/
+├── server.js                       HTTP server, connectDB, initSocket, listen
+└── src/
+    ├── app.js                      express app, 4 middlewares, 4 routers
+    ├── config/
+    │   ├── config.js               env validation, defaults, ALB_ENABLED gate
+    │   ├── db.js                   mongoose.connect, exit(1) on failure
+    │   ├── redis.js                one ioredis client
+    │   └── aws.js                  ECR / ECS / ELBv2 clients
+    ├── models/
+    │   ├── user.model.js           username, email, password (select:false)
+    │   ├── user.js                 DEAD DUPLICATE — nothing imports it
+    │   ├── project.js              current state, ALB ARNs, webhookSecret
+    │   ├── deployment.model.js     history: steps[], logs[], BUILD_STEPS
+    │   ├── session.model.js        hashed refresh tokens, revocable
+    │   └── otp.model.js            hashed OTP with a 300s TTL index
+    ├── middlewares/
+    │   └── auth.middleware.js      bearer token → req.user
+    ├── routes/                     auth · project · deployment · webhook
+    ├── controllers/
+    │   ├── auth.controller.js      register, login, refresh, logout, verify
+    │   ├── project.controller.js   CRUD, history, redeploy, AWS teardown
+    │   ├── deployment.controller.js the replay endpoint — the only one with logs
+    │   └── webhook.controller.js   header routing, payload extraction
+    ├── services/
+    │   ├── queue.service.js        LPUSH / blocking BRPOP
+    │   ├── deployment.service.js   createDeployment — shared by API + webhook
+    │   ├── log.service.js          ANSI strip, Redis publish, batched Mongo
+    │   ├── docker.service.js       runtime detection, Dockerfile gen, build
+    │   ├── ecr.service.js          auth token, repo ensure, tag, push
+    │   ├── ecs.service.js          task defs, RunTask, service lifecycle
+    │   ├── alb.service.js          target groups, rules, priorities, health
+    │   ├── webhook.service.js      timing-safe HMAC, processGithubPush
+    │   └── email.service.js        nodemailer over Gmail OAuth2
+    ├── sockets/
+    │   └── index.js                handshake auth, owned rooms, Redis bridge
+    ├── utils/util.js               generateOtp, refreshCookieOptions, OTP HTML
+    └── workers/
+        └── buildWorker.js          the loop, 5 steps, health wait, watchdog</code></pre>
+
+  <div class="note">
+    <div class="t">Reading order</div>
+    <p>Follow the data, not the folders: boot path, models, auth, create and enqueue, the
+    worker, the two deploy paths, streaming, webhook, teardown. Read
+    <code>log.service.js</code> before the other services — every one of them takes its logger
+    as an argument, and none of them make sense until you know what that argument does.</p>
+  </div>
+</section>
+
+<footer>
+  LaunchBase backend architecture. Companion to
+  <code>backend_architecture_dataflow.md</code>, <code>DAY13.md</code> and
+  <code>ALB-SETUP.md</code>.
+</footer>
+
+</div>
+</main>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:'base',
+    securityLevel:'loose',
+    fontFamily:"'Inter',system-ui,sans-serif",
+    themeVariables:{
+      background:'#0b0b0c',
+      primaryColor:'#101012',
+      primaryTextColor:'#ededed',
+      primaryBorderColor:'#00e599',
+      secondaryColor:'#141418',
+      tertiaryColor:'#0b0b0c',
+      lineColor:'#5f5f68',
+      textColor:'#c2c2c9',
+      mainBkg:'#101012',
+      nodeBorder:'#00e599',
+      clusterBkg:'#0d0d10',
+      clusterBorder:'#1c1c20',
+      titleColor:'#ededed',
+      edgeLabelBackground:'#0b0b0c',
+      actorBkg:'#101012',
+      actorBorder:'#00e599',
+      actorTextColor:'#ededed',
+      actorLineColor:'#5f5f68',
+      signalColor:'#c2c2c9',
+      signalTextColor:'#c2c2c9',
+      labelBoxBkgColor:'#101012',
+      labelBoxBorderColor:'#00e599',
+      labelTextColor:'#ededed',
+      loopTextColor:'#c2c2c9',
+      noteBkgColor:'#141418',
+      noteBorderColor:'#5f5f68',
+      noteTextColor:'#c2c2c9',
+      sequenceNumberColor:'#050505',
+      attributeBackgroundColorOdd:'#0d0d10',
+      attributeBackgroundColorEven:'#101012'
+    }
+  });
+
+  // scroll spy
+  const links = [...document.querySelectorAll('nav.side a')];
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(a => a.classList.remove('active'));
+        const a = map.get(e.target.id);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-10% 0px -78% 0px', threshold: 0 });
+  document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
+</script>
 </body>
 </html>

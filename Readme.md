@@ -7,7 +7,7 @@ Here is exactly how your Vercel/Heroku clone will come to life:
 * **Day 3:** Project CRUD operations (Create a project, fetch user's projects, delete a project).
 ### Phase 2: Background Workers & Message Queue (Days 4–5)
 **Goal:** Decouple the web server from the heavy build process so the API doesn't crash.
-* **Day 4:** Set up Redis and create the task queue (using LPUSH and RPOP).
+* **Day 4:** Set up Redis and create the task queue (using LPUSH and BRPOP).
 * **Day 5:** Build the Node.js background worker (buildWorker.js) that listens for new tasks and clones the GitHub repository locally.
 ### Phase 3: Docker & GitHub Automation (Days 6–8)
 **Goal:** Containerize the user's code and connect it to their GitHub actions.

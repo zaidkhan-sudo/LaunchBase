@@ -82,7 +82,7 @@ function initSocket(httpServer) {
                 // their build logs.
                 const project = await Project.findOne({
                     _id: projectId,
-                    owner: socket.userId,
+                    $or: [{ owner: socket.userId }, { isDemo: true }],
                 }).select('_id')
 
                 if (!project) {

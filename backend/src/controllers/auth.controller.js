@@ -48,7 +48,8 @@ async function  handleRegister(req,res){
                 user:{
                     username:user.username,
                     email:user.email,
-                    veified:user.verified
+                    verified:user.verified,
+                    isAdmin:config.ADMIN_EMAILS.includes(user.email.toLowerCase().trim())
                 },
             }
         )
@@ -111,7 +112,8 @@ async function handleLogin(req,res){
                 msg:"Logged in successfully",
                 user:{
                     username:user.username,
-                    email:user.email
+                    email:user.email,
+                    isAdmin:config.ADMIN_EMAILS.includes(user.email.toLowerCase().trim())
                 },
                 accessToken
             }
@@ -133,7 +135,8 @@ async function handleGetMe(req,res){
                     username:req.user.username,
                     email:req.user.email,
                     verified:req.user.verified,
-                    githubUsername:req.user.githubUsername
+                    githubUsername:req.user.githubUsername,
+                    isAdmin:config.ADMIN_EMAILS.includes(req.user.email.toLowerCase().trim())
                 }
             }
         )
@@ -325,7 +328,8 @@ async function handleVerifyEmail(req,res){
                 user:{
                     username:user.username,
                     email:user.email,
-                    verified:user.verified
+                    verified:user.verified,
+                    isAdmin:config.ADMIN_EMAILS.includes(user.email.toLowerCase().trim())
                 },
                 // Returned so the client lands authenticated straight after
                 // verifying, instead of being bounced to the login screen.

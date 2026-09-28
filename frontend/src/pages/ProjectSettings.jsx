@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/Card'
 import { EmptyState } from '@/components/EmptyState'
 import { useDeleteProject, useProject } from '@/hooks/useProjects'
+import { useAuthStore } from '@/store/auth.store'
 import { API_BASE_URL, apiError } from '@/lib/api'
 import { repoSlug } from '@/lib/format'
 
@@ -28,6 +29,7 @@ export default function ProjectSettings() {
 
   const { data: project, isLoading, error } = useProject(projectId)
   const deleteProject = useDeleteProject()
+  const user = useAuthStore((state) => state.user)
 
   const [revealed, setRevealed] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -124,18 +126,24 @@ export default function ProjectSettings() {
               <label className="mb-1.5 block text-xs font-medium text-fg-muted">Secret</label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 truncate rounded-md border border-border bg-bg px-3 py-2 font-mono text-xs text-fg">
-                  {revealed ? project.webhookSecret : '•'.repeat(40)}
+                  {!user?.isAdmin ? '•'.repeat(40) : (revealed ? project.webhookSecret : '•'.repeat(40))}
                 </code>
-                <button
-                  type="button"
-                  onClick={() => setRevealed((v) => !v)}
-                  aria-label={revealed ? 'Hide secret' : 'Reveal secret'}
-                  title={revealed ? 'Hide secret' : 'Reveal secret'}
-                  className="inline-flex items-center rounded-md border border-border px-2 py-1 text-xs text-fg-muted transition-colors hover:border-border-hover hover:bg-bg-hover hover:text-fg"
-                >
-                  {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                </button>
-                <CopyButton value={project.webhookSecret} label="Copy secret" />
+                {user?.isAdmin ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setRevealed((v) => !v)}
+                      aria-label={revealed ? 'Hide secret' : 'Reveal secret'}
+                      title={revealed ? 'Hide secret' : 'Reveal secret'}
+                      className="inline-flex items-center rounded-md border border-border px-2 py-1 text-xs text-fg-muted transition-colors hover:border-border-hover hover:bg-bg-hover hover:text-fg"
+                    >
+                      {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                    </button>
+                    <CopyButton value={project.webhookSecret} label="Copy secret" />
+                  </>
+                ) : (
+                  <span className="text-[11px] text-fg-subtle">Admin only</span>
+                )}
               </div>
             </div>
 
@@ -160,9 +168,20 @@ export default function ProjectSettings() {
               undone.
             </CardDescription>
           </CardHeader>
-          <CardFooter className="border-status-failed/25 justify-end">
-            <Button variant="dangerOutline" size="sm" onClick={() => setConfirmOpen(true)}>
-              Delete project
+          <CardFooter className="border-status-failed/25 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+            {!user?.isAdmin && (
+              <span className="text-xs text-status-failed/90">
+                Project deletion and AWS teardown are restricted to administrators.
+              </span>
+            )}
+            <Button
+              variant="dangerOutline"
+              size="sm"
+              onClick={() => setConfirmOpen(true)}
+              disabled={!user?.isAdmin}
+              title={!user?.isAdmin ? 'Deletion is restricted to administrators' : undefined}
+            >
+              {user?.isAdmin ? 'Delete project' : 'Delete (Admin Only)'}
             </Button>
           </CardFooter>
         </Card>

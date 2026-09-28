@@ -13,12 +13,16 @@ async function handleGetDeploymentById(req, res) {
 
         // Filtering on owner (denormalized onto the deployment) avoids a populate
         // just to authorize the read.
-        const deployment = await Deployment.findOne({
-            _id: deployment_id,
-            owner: req.user._id,
-        }).populate("project", "name repoUrl branch liveUrl")
-
-        if (!deployment) return res.status(404).json({ msg: "Deployment not found or unauthorized" })
+        const deployment = await Deployment.findById(deployment_id)
+            .populate("project", "name repoUrl branch liveUrl isDemo")
+            
+        if (!deployment) return res.status(404).json({ msg: "Deployment not found" })
+            
+        const isOwner = String(deployment.owner) === String(req.user._id)
+        const isDemo = deployment.project?.isDemo === true
+        if (!isOwner && !isDemo) {
+            return res.status(404).json({ msg: "Deployment not found or unauthorized" })
+        }
 
         return res.status(200).json({
             msg: "Deployment successfully fetched",

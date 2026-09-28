@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ArrowLeft, Github } from 'lucide-react'
+import { ArrowLeft, Github, ShieldAlert } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card'
 import { useCreateProject } from '@/hooks/useProjects'
+import { useAuthStore } from '@/store/auth.store'
 import { apiError } from '@/lib/api'
 
 // Mirrors the Project schema's match validator so the user sees the rule before
@@ -19,6 +20,7 @@ export default function NewProject() {
 
   const navigate = useNavigate()
   const createProject = useCreateProject()
+  const user = useAuthStore((state) => state.user)
 
   function update(field) {
     return (event) => {
@@ -102,6 +104,17 @@ export default function NewProject() {
 
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-5">
+            {!user?.isAdmin && (
+              <div className="flex items-start gap-2.5 rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-300">
+                <ShieldAlert className="mt-0.5 size-4 shrink-0 text-amber-400" />
+                <div>
+                  <p className="font-semibold text-amber-300">Demo Environment Notice</p>
+                  <p className="mt-1 leading-relaxed text-fg-muted">
+                    Live cloud deployments to AWS ECS Fargate & ALB are reserved for the administrator to manage infrastructure costs. Feel free to explore pre-deployed demo projects and view live log replays from the dashboard.
+                  </p>
+                </div>
+              </div>
+            )}
             <Input
               label="Repository URL"
               name="repoUrl"
@@ -146,8 +159,13 @@ export default function NewProject() {
 
           <CardFooter>
             <span className="text-xs text-fg-subtle">The first build starts immediately.</span>
-            <Button type="submit" loading={createProject.isPending}>
-              Deploy
+            <Button
+              type="submit"
+              loading={createProject.isPending}
+              disabled={!user?.isAdmin}
+              title={!user?.isAdmin ? 'Deployments are restricted to administrators' : undefined}
+            >
+              {user?.isAdmin ? 'Deploy' : 'Deploy (Admin Only)'}
             </Button>
           </CardFooter>
         </form>

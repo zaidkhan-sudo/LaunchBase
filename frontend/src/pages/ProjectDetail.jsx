@@ -9,6 +9,7 @@ import {
   Github,
   RotateCw,
   Settings,
+  Sparkles,
 } from 'lucide-react'
 import { AppShell } from '@/components/layout/AppShell'
 import { StatusBadge, isInFlight } from '@/components/StatusBadge'
@@ -20,6 +21,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { EmptyState } from '@/components/EmptyState'
 import { useDeployments, useProject, useRedeploy } from '@/hooks/useProjects'
 import { useDeploymentStream } from '@/hooks/useDeploymentStream'
+import { useAuthStore } from '@/store/auth.store'
 import { apiError } from '@/lib/api'
 import { commitSubject, durationBetween, repoSlug, shortSha } from '@/lib/format'
 
@@ -31,6 +33,7 @@ export default function ProjectDetail() {
   const { data: project, isLoading: projectLoading, error: projectError } = useProject(projectId)
   const { data: deployments, isLoading: deploymentsLoading } = useDeployments(projectId)
   const redeploy = useRedeploy(projectId)
+  const user = useAuthStore((state) => state.user)
 
   // The URL is the source of truth for which deployment is shown, so the view is
   // shareable and survives a refresh. Falls back to the newest one.
@@ -119,6 +122,12 @@ export default function ProjectDetail() {
             <h1 className="truncate text-lg font-semibold tracking-tight text-fg">
               {projectLoading ? 'Loading…' : project?.name}
             </h1>
+            {project?.isDemo && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/40 bg-sky-500/10 px-2.5 py-0.5 font-mono text-xs font-medium text-sky-300 shadow-sm shadow-sky-500/10">
+                <span className="size-1.5 rounded-full bg-sky-400 animate-pulse" />
+                Demo Showcase
+              </span>
+            )}
             {effectiveStatus && <StatusBadge status={effectiveStatus} />}
           </div>
 
@@ -166,13 +175,29 @@ export default function ProjectDetail() {
             size="sm"
             onClick={handleRedeploy}
             loading={redeploy.isPending}
-            disabled={isInFlight(effectiveStatus)}
+            disabled={isInFlight(effectiveStatus) || !user?.isAdmin}
+            title={!user?.isAdmin ? 'Redeploy is restricted to administrators' : undefined}
           >
             <RotateCw />
-            Redeploy
+            {user?.isAdmin ? 'Redeploy' : 'Redeploy (Admin Only)'}
           </Button>
         </div>
       </div>
+
+      {project?.isDemo && !user?.isAdmin && (
+        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-sky-500/30 bg-sky-950/25 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2.5">
+            <Sparkles className="size-4 shrink-0 text-sky-400" />
+            <p className="text-xs text-fg">
+              <span className="font-semibold text-sky-300">Viewing in Demo Showcase Mode</span>
+              <span className="text-fg-muted"> — Live log replays and metrics are visible, redeploys are disabled.</span>
+            </p>
+          </div>
+          <span className="self-start rounded-full border border-sky-500/30 bg-sky-500/20 px-2.5 py-0.5 font-mono text-[11px] font-medium text-sky-300 sm:self-auto">
+            Demo Showcase
+          </span>
+        </div>
+      )}
 
       {/* ---- Build view ---- */}
       <div className="grid gap-5 lg:grid-cols-[300px_1fr]">

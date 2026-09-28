@@ -15,7 +15,14 @@ export function ProjectCard({ project }) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-medium text-fg">{project.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="truncate text-sm font-medium text-fg">{project.name}</h3>
+            {project.isDemo && (
+              <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-2 py-0.5 font-mono text-[10px] font-medium text-sky-400">
+                Demo
+              </span>
+            )}
+          </div>
           <p className="mt-1 truncate text-xs text-fg-subtle">{repoSlug(project.repoUrl)}</p>
         </div>
         <StatusBadge status={project.status} size="sm" />

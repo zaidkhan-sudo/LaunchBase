@@ -51,7 +51,11 @@ async function handleCreateProject(req, res) {
 
 async function handleGetUserProjects(req, res) {
     try {
-        const projects = await Project.find({ owner: req.user._id }).sort({ createdAt: -1 })
+        const projects = await Project.find(
+            {
+                $or: [{ owner: req.user._id }, { isDemo: true }]
+            }
+        ).sort({ createdAt: -1 })
 
         // Attach each project's most recent deployment so the dashboard can show
         // the last commit without an extra request per row.
@@ -89,7 +93,15 @@ async function handleGetUserProjects(req, res) {
 async function handleGetProjectById(req, res) {
     try {
         const { project_id } = req.params
-        const project = await Project.findOne({ _id: project_id, owner: req.user._id })
+        const project = await Project.findOne(
+            {
+                _id: project_id,
+                $or: [
+                    { owner: req.user._id },
+                    { isDemo: true }
+                ]
+            }
+        )
         if (!project) return res.status(404).json({ msg: "Project not found or unauthorized" })
 
         const latestDeployment = await Deployment.findOne({ project: project._id })
@@ -218,7 +230,10 @@ async function handleDeleteProject(req, res) {
 async function handleGetProjectDeployments(req, res) {
     try {
         const { project_id } = req.params
-        const project = await Project.findOne({ _id: project_id, owner: req.user._id }).select("_id")
+        const project = await Project.findOne({
+            _id: project_id,
+            $or:[{owner: req.user._id},{isDemo:true}]
+        }).select("_id")
         if (!project) return res.status(404).json({ msg: "Project not found or unauthorized" })
 
         const deployments = await Deployment.find({ project: project._id })

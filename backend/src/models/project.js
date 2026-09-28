@@ -62,6 +62,11 @@ const projectSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    isDemo:{
+      type:Boolean,
+      default:false,
+      index:true,
+    }
   },
   {
     timestamps: true,
